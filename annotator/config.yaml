@@ -1,0 +1,43 @@
+# Atlas Annotator configuration — ECONOMY defaults (target: <$0.12 per 2-min video)
+# API key: set the OPENROUTER_API_KEY environment variable (never store it here).
+
+api:
+  base_url: https://openrouter.ai/api/v1
+  key_env: OPENROUTER_API_KEY
+
+# All models are OpenRouter IDs and can be swapped freely.
+# QUALITY preset (if cost were no issue): label/audit/escalate -> anthropic/claude-sonnet-5,
+#   label_fps 3.0, label_max_frames 28, max_width 854, audit_frames_per_segment 2.
+models:
+  context: google/gemini-2.5-pro          # Pass 0: task summary + glossary — quality here steers the
+                                          # whole video (one call, ~$0.03); flash misread a sample task
+  label: google/gemini-2.5-flash          # Pass 1: batched labeling. Tested: pro scored NO better than
+                                          # flash (gap is vocabulary, not vision) at 5x the price
+  audit: google/gemini-2.5-flash          # Pass 3: text-only consistency audit
+  repair: google/gemini-2.5-flash-lite    # Pass 2: fix linter violations (trivial task)
+  ocr: google/gemini-2.5-flash            # reading segment timestamps from screenshots
+  ingest: anthropic/claude-sonnet-5       # compiling the guidelines PDF (rare, quality matters)
+  escalate: google/gemini-2.5-pro         # re-labels ONLY low-confidence segments; "" disables.
+                                          # (sonnet tested well but its uncapped thinking tokens cost
+                                          # ~$0.30/video when many segments escalate)
+
+sampling:
+  context_fps: 0.5            # frames/sec for the whole-video context pass
+  context_max_frames: 48
+  label_fps: 2.0              # frames/sec inside each segment
+  label_max_frames: 12        # hard cap per segment
+  batch_size: 6               # segments labeled per API call (big overhead saving)
+  pad_seconds: 0.5            # padding for single-segment (escalation) calls
+  audit_frames_per_segment: 0 # 0 = text-only audit (near-free); >0 adds frames back
+  escalate_confidence: 0.55   # segments below this confidence get re-labeled by 'escalate' model
+                              # (audit-suspect segments always escalate; tested 0.7 = 11/18 segments
+                              # escalated = second full pass, too expensive)
+  escalate_fps: 3.0           # denser frames for escalated segments
+  escalate_max_frames: 16
+  max_width: 640              # frames resized to at most this width
+  jpeg_quality: 78
+
+limits:
+  max_output_tokens: 10000    # reasoning models spend "thinking" tokens from this budget too
+  reasoning_max_tokens: 1024  # cap hidden thinking on Gemini models (quality vs output-cost balance)
+  request_retries: 3

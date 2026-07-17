@@ -1,0 +1,6 @@
+openai
+opencv-python
+pypdf
+pyyaml
+rich
+supabase

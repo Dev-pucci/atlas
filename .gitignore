@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+annotator_out/
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/next-env.d.ts
+web/*.tsbuildinfo
+
+# secrets — never commit real env values
+.env
+.env.local
+.env*.local
+web/.env
+web/.env.local
+
+# sample video source files (large binaries — not needed to run/host the app)
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# personal/task data + docs — this repo is code only, nothing task- or platform-specific
+*.md
+/video_*/
+/instructions/
+/annotator/gold/
+/annotator/knowledge/
