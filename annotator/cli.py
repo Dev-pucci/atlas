@@ -5,6 +5,8 @@ Commands:
   python -m annotator annotate <video-or-folder> --segments <file>|--segments-image <png>
   python -m annotator lint "<label>"                   quick offline label check
   python -m annotator eval                             score pipeline vs gold data
+  python -m annotator push <video-or-folder>            upload a completed run for hosted review
+  python -m annotator watch                             process videos uploaded through the web UI
 """
 
 from __future__ import annotations
@@ -12,19 +14,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .pipeline.boundaries import propose_segments
 from .pipeline.client import Router, load_config
-from .pipeline.frames import find_video, video_info
+from .pipeline.frames import find_video
 from .pipeline import ingest as ingest_mod
-from .pipeline.label import build_context, escalate_segments, label_segments
-from .pipeline.audit import audit_segments
-from .pipeline.lint import lint_label, repair_label
-from .pipeline.report import write_report
+from .pipeline.lint import lint_label
+from .pipeline.run import run_pipeline
 from .pipeline.segments import (
     parse_segments_file,
     parse_segments_image,
     parse_segments_text,
-    validate_segments,
 )
 
 
@@ -42,70 +40,23 @@ def cmd_annotate(args) -> None:
     fewshot = (ingest_mod.load_fewshot() + "\n\n" + ingest_mod.load_vocabulary()).strip()
 
     video_path = find_video(args.video)
-    info = video_info(video_path)
     out_dir = video_path.parent / "annotator_out"
     out_dir.mkdir(exist_ok=True)
-    print(f"Video: {video_path.name} — {info.duration:.1f}s @ {info.fps:.1f}fps {info.width}x{info.height}")
 
-    # Pass 0 — context & glossary (reused by auto-segment below, and by labeling either way;
-    # a pure reorder — build_context never took segments as an argument)
-    context = build_context(video_path, router, cfg, out_dir, ingest_mod.load_vocabulary())
-    print(f"Task: {context.get('task_summary', '')[:120]}...")
-
+    segments = None  # None -> run_pipeline auto-segments (Pass 0.5)
     if args.segments:
         segments = parse_segments_file(args.segments)
     elif args.segments_image:
         segments = parse_segments_image(args.segments_image, router)
     elif args.segments_text:
         segments = parse_segments_text(args.segments_text)
-    elif args.auto_segment:
-        segments = propose_segments(video_path, context, rulebook, router, cfg)
-    else:
+    elif not args.auto_segment:
         raise SystemExit(
             "Provide segments via --segments <file>, --segments-image <png>, --segments-text '...', "
             "or --auto-segment"
         )
-    print(f"Segments: {len(segments)} ({segments[0].time_str()} ... {segments[-1].time_str()})")
-    for w in validate_segments(segments, info.duration):
-        print(f"  ! {w}")
 
-    # Pass 1 — batched per-segment labeling
-    print("Pass 1: labeling segments (batched)")
-    segments = label_segments(video_path, segments, context, rulebook, fewshot, router, cfg)
-
-    # Pass 2 — deterministic lint + repair
-    print("Pass 2: lint + repair")
-    for seg in segments:
-        violations = lint_label(seg.label, seg.duration)
-        errors = [v for v in violations if v.severity == "error"]
-        if errors:
-            fixed, remaining = repair_label(seg.label, violations, router, seg.duration)
-            if fixed != seg.label:
-                print(f"  seg {seg.index}: repaired -> {fixed}")
-                seg.label = fixed
-            for v in remaining:
-                if v.severity == "error":
-                    seg.flags.append(f"lint: {v}")
-        for v in violations:
-            if v.severity == "warn":
-                seg.flags.append(f"lint: {v}")
-
-    # Pass 3 — audit (text-only by default: fixes grammar/naming, FLAGS visual doubts)
-    segments, video_notes = audit_segments(video_path, segments, context, router, cfg, rulebook)
-
-    # Pass 4 — escalate audit-suspect / low-confidence segments to the stronger model
-    segments = escalate_segments(video_path, segments, context, rulebook, fewshot, router, cfg)
-
-    # final lint on anything rewritten by audit or escalation
-    for seg in segments:
-        for v in lint_label(seg.label, seg.duration):
-            if v.severity == "error":
-                fixed, _ = repair_label(seg.label, [v], router, seg.duration)
-                seg.label = fixed
-
-    write_report(out_dir, video_path.name, segments, context, video_notes, router.cost,
-                 video_path=video_path, cfg=cfg,
-                 segmentation_mode="auto" if args.auto_segment else "given")
+    run_pipeline(video_path, out_dir, router, cfg, rulebook, fewshot, segments=segments)
 
 
 def cmd_lint(args) -> None:
@@ -186,6 +137,12 @@ def cmd_push(args) -> None:
     push(args.video, app_url=args.app_url)
 
 
+def cmd_watch(args) -> None:
+    from .pipeline.watch import watch
+
+    watch(poll_seconds=args.poll_seconds)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="annotator", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -231,6 +188,11 @@ def main() -> None:
     p_push.add_argument("video", help="video file or folder (must already have annotator_out/run.json)")
     p_push.add_argument("--app-url", help="your deployed Vercel URL, to print a direct review link")
     p_push.set_defaults(func=cmd_push)
+
+    p_watch = sub.add_parser("watch", help="poll Supabase for web-uploaded videos and process them locally")
+    p_watch.add_argument("--poll-seconds", type=float, default=10.0,
+                         help="seconds between queue checks when idle (default 10)")
+    p_watch.set_defaults(func=cmd_watch)
 
     args = p.parse_args()
     args.func(args)

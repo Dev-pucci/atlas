@@ -1,6 +1,8 @@
 -- Atlas Annotator — hosted review schema.
 -- Run this once in the Supabase SQL Editor (Project -> SQL Editor -> New query -> paste -> Run).
--- Then create a Storage bucket named "frames" and set it to PRIVATE (not public).
+-- Then create two Storage buckets, both set to PRIVATE (not public):
+--   "frames"  — review-frame thumbnails
+--   "uploads" — raw videos uploaded through the web UI, awaiting the local watcher
 
 create extension if not exists pgcrypto;
 
@@ -48,7 +50,23 @@ create table if not exists knowledge (
   updated_at timestamptz default now()
 );
 
+-- One row per video uploaded through the web UI, from queued through processed.
+-- The local watcher (`python -m annotator watch`) polls this table.
+create table if not exists jobs (
+  id uuid primary key default gen_random_uuid(),
+  status text not null default 'queued',  -- queued | processing | done | error
+  original_filename text not null,
+  storage_path text not null,             -- path in the "uploads" bucket
+  progress_note text,
+  error_message text,
+  video_id uuid references videos(id) on delete set null,
+  created_at timestamptz default now(),
+  started_at timestamptz,
+  finished_at timestamptz
+);
+
 create index if not exists segments_video_id_idx on segments(video_id);
+create index if not exists jobs_status_idx on jobs(status);
 
 -- Row Level Security: locked down by default. The local push script and the
 -- Vercel app both use the service_role key, which bypasses RLS entirely — so
@@ -56,4 +74,7 @@ create index if not exists segments_video_id_idx on segments(video_id);
 alter table videos enable row level security;
 alter table segments enable row level security;
 alter table knowledge enable row level security;
--- (No policies are created — service_role bypasses RLS; anon key gets nothing.)
+alter table jobs enable row level security;
+-- (No policies are created — service_role bypasses RLS; anon key gets nothing.
+--  Browser uploads to the "uploads" bucket are authorized by the signed upload
+--  URL/token itself, not by any table or bucket policy.)

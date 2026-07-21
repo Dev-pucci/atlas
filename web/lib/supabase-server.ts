@@ -29,6 +29,7 @@ export function supabaseServer() {
 }
 
 export const FRAMES_BUCKET = "frames";
+export const UPLOADS_BUCKET = "uploads";
 
 /** Sign a batch of storage paths for temporary browser access (default 1 hour). */
 export async function signFramePaths(paths: string[], expiresInSeconds = 3600): Promise<string[]> {
@@ -38,4 +39,16 @@ export async function signFramePaths(paths: string[], expiresInSeconds = 3600): 
     .createSignedUrls(paths, expiresInSeconds);
   if (error) throw error;
   return (data ?? []).map((d) => d.signedUrl ?? "");
+}
+
+/**
+ * Mint a one-time signed upload URL for the browser to PUT a raw video directly to
+ * Supabase Storage — bypassing Vercel's API route body-size limits entirely. The
+ * service_role key never reaches the browser; the returned token is itself the
+ * (single-use, path-scoped) authorization for that one upload.
+ */
+export async function createUploadTarget(path: string): Promise<{ signedUrl: string; token: string; path: string }> {
+  const { data, error } = await supabaseServer().storage.from(UPLOADS_BUCKET).createSignedUploadUrl(path);
+  if (error) throw error;
+  return { signedUrl: data.signedUrl, token: data.token, path: data.path };
 }

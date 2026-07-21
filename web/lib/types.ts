@@ -43,6 +43,19 @@ export interface KnowledgeRow {
   updated_at: string;
 }
 
+export interface JobRow {
+  id: string;
+  status: "queued" | "processing" | "done" | "error";
+  original_filename: string;
+  storage_path: string;
+  progress_note: string | null;
+  error_message: string | null;
+  video_id: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 /** What the review page passes down to the client component — segment + already-signed frame URLs. */
 export interface SegmentWithFrames extends SegmentRow {
   frameUrls: string[];

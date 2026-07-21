@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase-server";
 import { fmtPct, fmtUsd } from "@/lib/format";
-import type { VideoRow, SegmentRow } from "@/lib/types";
+import type { VideoRow, SegmentRow, JobRow } from "@/lib/types";
+import { UploadVideo } from "./UploadVideo";
 
 export const dynamic = "force-dynamic";
+
+const JOB_STATUS_COLOR: Record<JobRow["status"], string> = {
+  queued: "#898781",
+  processing: "#2a78d6",
+  error: "#d03b3b",
+  done: "#0ca30c",
+};
 
 interface VideoWithStats extends VideoRow {
   segmentCount: number;
@@ -87,8 +95,19 @@ async function loadVideos(): Promise<VideoWithStats[]> {
   });
 }
 
+async function loadQueuedJobs(): Promise<JobRow[]> {
+  const sb = supabaseServer();
+  const { data, error } = await sb
+    .from("jobs")
+    .select("*")
+    .neq("status", "done")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as JobRow[];
+}
+
 export default async function VideoListPage() {
-  const videos = await loadVideos();
+  const [videos, jobs] = await Promise.all([loadVideos(), loadQueuedJobs()]);
 
   const totalCost = videos.reduce((sum, v) => sum + (v.cost_usd ?? 0), 0);
   const withCost = videos.filter((v) => v.cost_usd != null);
@@ -104,6 +123,41 @@ export default async function VideoListPage() {
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
       <h1 style={{ fontSize: 22, marginBottom: 20 }}>Atlas Annotator — Review Queue</h1>
+
+      <UploadVideo />
+
+      {jobs.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Processing Queue</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {jobs.map((j) => (
+              <div
+                key={j.id}
+                style={{
+                  background: "#fff",
+                  borderRadius: 8,
+                  padding: 12,
+                  boxShadow: "0 1px 3px rgba(0,0,0,.1)",
+                  borderLeft: `5px solid ${JOB_STATUS_COLOR[j.status]}`,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontWeight: 600 }}>{j.original_filename}</span>
+                  <span style={{ fontSize: 12.5, color: JOB_STATUS_COLOR[j.status], textTransform: "uppercase" }}>
+                    {j.status}
+                  </span>
+                </div>
+                {j.status === "processing" && j.progress_note && (
+                  <div style={{ fontSize: 13, color: "#52514e", marginTop: 4 }}>{j.progress_note}</div>
+                )}
+                {j.status === "error" && j.error_message && (
+                  <div style={{ fontSize: 13, color: "#d03b3b", marginTop: 4 }}>{j.error_message}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {videos.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>

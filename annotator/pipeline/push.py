@@ -89,8 +89,8 @@ def _read_knowledge_file(name: str) -> str:
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-def push(video_folder: str | Path, app_url: str | None = None) -> str:
-    """Push one video's run.json + review frames to Supabase. Returns the hosted review URL."""
+def push(video_folder: str | Path, app_url: str | None = None) -> tuple[str, str]:
+    """Push one video's run.json + review frames to Supabase. Returns (video_id, hosted review URL)."""
     video_folder = Path(video_folder)
     video_path = find_video(video_folder)
     out_dir = video_folder / "annotator_out"
@@ -178,4 +178,4 @@ def push(video_folder: str | Path, app_url: str | None = None) -> str:
 
     url = f"{app_url.rstrip('/')}/videos/{video_id}" if app_url else f"<your-app>.vercel.app/videos/{video_id}"
     print(f"\nPushed. Hosted review URL: {url}")
-    return url
+    return video_id, url

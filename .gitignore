@@ -28,3 +28,6 @@ web/.env.local
 /instructions/
 /annotator/gold/
 /annotator/knowledge/
+
+# local scratch space for the watcher's downloaded web-uploaded videos
+/web_uploads/
