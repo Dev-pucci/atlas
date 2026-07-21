@@ -86,10 +86,26 @@ def watch(poll_seconds: float = 10.0) -> None:
 
     print(f"Watching for queued jobs every {poll_seconds:.0f}s... (Ctrl+C to stop)")
     while True:
-        jobs = (
-            sb.table("jobs").select("*").eq("status", "queued").order("created_at").limit(1).execute().data
-        )
+        try:
+            jobs = (
+                sb.table("jobs").select("*").eq("status", "queued").order("created_at").limit(1).execute().data
+            )
+        except Exception as e:
+            # Polling itself can hit a transient network/connection error (seen in practice:
+            # httpx.RemoteProtocolError "Server disconnected"). This loop is meant to run for
+            # hours/days unattended — one flaky request must not kill the whole watcher.
+            print(f"Poll failed (will retry): {e}")
+            time.sleep(poll_seconds)
+            continue
         if not jobs:
             time.sleep(poll_seconds)
             continue
-        _process_job(jobs[0], sb, router, cfg, rulebook, fewshot)
+        try:
+            _process_job(jobs[0], sb, router, cfg, rulebook, fewshot)
+        except Exception as e:
+            # _process_job's own try/except covers the actual pipeline work; this outer one
+            # covers the "mark processing" call at its very start, which runs before that
+            # try/except begins — so the same transient-network class of failure can't
+            # escape and kill the loop from there either.
+            print(f"Unexpected top-level failure on job {jobs[0]['id']} (will retry next poll): {e}")
+            traceback.print_exc()
