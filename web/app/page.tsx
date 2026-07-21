@@ -97,13 +97,20 @@ async function loadVideos(): Promise<VideoWithStats[]> {
 
 async function loadQueuedJobs(): Promise<JobRow[]> {
   const sb = supabaseServer();
-  const { data, error } = await sb
-    .from("jobs")
-    .select("*")
-    .neq("status", "done")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as JobRow[];
+  try {
+    const { data, error } = await sb
+      .from("jobs")
+      .select("*")
+      .neq("status", "done")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as JobRow[];
+  } catch (e) {
+    // Don't let a missing/broken "jobs" table (e.g. migration.sql not re-run yet after this
+    // feature shipped) take down the whole dashboard — just show no queue.
+    console.error("loadQueuedJobs failed:", e);
+    return [];
+  }
 }
 
 export default async function VideoListPage() {
