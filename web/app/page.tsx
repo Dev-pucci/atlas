@@ -103,16 +103,7 @@ export default async function VideoListPage() {
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Atlas Annotator — Review Queue</h1>
-      <p style={{ color: "#666", marginTop: 0, marginBottom: 20, fontSize: 14 }}>
-        Videos pushed from the local pipeline (<code>python -m annotator push &lt;folder&gt;</code>).
-      </p>
-
-      {videos.length === 0 && (
-        <p style={{ color: "#777" }}>
-          No videos yet. Run <code>python -m annotator push &lt;video_folder&gt;</code> from your PC.
-        </p>
-      )}
+      <h1 style={{ fontSize: 22, marginBottom: 20 }}>Atlas Annotator — Review Queue</h1>
 
       {videos.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
