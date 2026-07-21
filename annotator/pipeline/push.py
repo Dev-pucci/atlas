@@ -11,12 +11,36 @@ import json
 import os
 from pathlib import Path
 
+from ..eval import GOLD_DIR, _time_to_s, score_boundaries_against_gold, score_labels_against_gold
 from .frames import find_video, video_info
 from .ingest import KNOWLEDGE_DIR
 from .report import extract_review_frames
 from .segments import Segment
 
 BUCKET = "frames"
+
+
+def _score_against_gold(video_folder_name: str, run: dict, duration: float) -> tuple[dict | None, dict | None]:
+    """label_accuracy is scored whenever gold data exists for this video; segmentation_accuracy
+    only when the run used --auto-segment (given segments trivially match gold boundaries, so
+    recall/precision there would be a meaningless ~100%). No API calls — run.json already has
+    everything needed."""
+    gold_path = GOLD_DIR / f"{video_folder_name}.json"
+    if not gold_path.exists():
+        return None, None
+    gold = json.loads(gold_path.read_text(encoding="utf-8"))
+    label_accuracy = score_labels_against_gold(run["segments"], gold["segments"])
+
+    segmentation_accuracy = None
+    if run.get("segmentation_mode") == "auto":
+        gold_points = sorted({round(_time_to_s(g["start"]), 2) for g in gold["segments"]}
+                             | {round(_time_to_s(g["end"]), 2) for g in gold["segments"]})
+        prop_points = sorted({round(s["start"], 2) for s in run["segments"]}
+                             | {round(s["end"], 2) for s in run["segments"]})
+        segmentation_accuracy = score_boundaries_against_gold(
+            prop_points, gold_points, len(run["segments"]), len(gold["segments"]), duration
+        )
+    return label_accuracy, segmentation_accuracy
 
 
 def _client():
@@ -88,6 +112,9 @@ def push(video_folder: str | Path, app_url: str | None = None) -> str:
     sb = _client()
     info = video_info(video_path)
 
+    cost = run.get("cost", {})
+    label_accuracy, segmentation_accuracy = _score_against_gold(video_folder.name, run, info.duration)
+
     video_row = {
         "name": run.get("video", video_path.name),
         "folder_name": video_folder.name,
@@ -97,7 +124,11 @@ def push(video_folder: str | Path, app_url: str | None = None) -> str:
         "hands_overview": context.get("hands_overview", ""),
         "objects": context.get("objects", []),
         "video_notes": run.get("video_notes", ""),
-        "cost_summary": "",
+        "cost_summary": cost.get("summary_text", ""),
+        "cost_usd": cost.get("total_usd"),
+        "cost_detail": cost,
+        "label_accuracy": label_accuracy,
+        "segmentation_accuracy": segmentation_accuracy,
     }
 
     existing_id = _load_cloud_id(out_dir)

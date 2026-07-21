@@ -20,6 +20,8 @@ models:
   escalate: google/gemini-2.5-pro         # re-labels ONLY low-confidence segments; "" disables.
                                           # (sonnet tested well but its uncapped thinking tokens cost
                                           # ~$0.30/video when many segments escalate)
+  segment: google/gemini-2.5-flash        # Pass 0.5 (auto-segment): boundary-finding is mechanical,
+                                          # not whole-task synthesis, so it doesn't need 'pro'
 
 sampling:
   context_fps: 0.5            # frames/sec for the whole-video context pass
@@ -36,6 +38,18 @@ sampling:
   escalate_max_frames: 16
   max_width: 640              # frames resized to at most this width
   jpeg_quality: 78
+
+  # Pass 0.5 (auto-segment): only used with `annotate --auto-segment` (no platform timestamps given).
+  # Sized against 102 real gold segments: mean 4.95s, median 4.7s, max 9.7s.
+  # Tuning round 1 tried 12s window / 2.0fps (denser, less blending): worse on the 5-video gold
+  # test (78%->75% recall, video_1 regressed hard 89%->61%) AND on a direct video_6 comparison —
+  # same class of audit-caught issue either way, but the tuned run added a new "stovetop" vs
+  # "table" naming inconsistency and awkward "left hand and right hand" phrasing not seen in this
+  # baseline. No evidence favors the tuned values; keeping these:
+  segment_window_seconds: 15.0    # fits 2-4 typical segments — enough local context per window
+  segment_overlap_seconds: 3.0    # stride = window - overlap = 12s; slack around window seams
+  segment_fps: 1.5                # between context_fps (0.5, "understand task") and label_fps (2.0)
+  segment_max_frames: 20          # cap per window call
 
 limits:
   max_output_tokens: 10000    # reasoning models spend "thinking" tokens from this budget too

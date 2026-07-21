@@ -55,29 +55,32 @@ export async function POST(req: NextRequest) {
 
   const sb = supabaseServer();
 
-  const { data: video, error: videoErr } = await sb
+  const { data: videoData, error: videoErr } = await sb
     .from("videos")
     .select("*")
     .eq("id", body.videoId)
     .maybeSingle();
   if (videoErr) return NextResponse.json({ error: videoErr.message }, { status: 500 });
-  if (!video) return NextResponse.json({ error: "video not found" }, { status: 404 });
+  if (!videoData) return NextResponse.json({ error: "video not found" }, { status: 404 });
+  const video = videoData as VideoRow;
 
-  const { data: allSegments, error: segErr } = await sb
+  const { data: allSegmentsData, error: segErr } = await sb
     .from("segments")
     .select("*")
     .eq("video_id", body.videoId)
     .order("seg_index", { ascending: true });
   if (segErr) return NextResponse.json({ error: segErr.message }, { status: 500 });
+  const allSegments = (allSegmentsData ?? []) as SegmentRow[];
 
-  const { data: knowledgeRows } = await sb.from("knowledge").select("*").in("key", ["rulebook", "vocabulary"]);
-  const knowledge = new Map((knowledgeRows as KnowledgeRow[] | null ?? []).map((k) => [k.key, k.content]));
+  const { data: knowledgeRowsData } = await sb.from("knowledge").select("*").in("key", ["rulebook", "vocabulary"]);
+  const knowledgeRows = (knowledgeRowsData ?? []) as KnowledgeRow[];
+  const knowledge = new Map(knowledgeRows.map((k) => [k.key, k.content]));
 
-  const segByIndex = new Map((allSegments as SegmentRow[]).map((s) => [s.seg_index, s]));
-  const segById = new Map((allSegments as SegmentRow[]).map((s) => [s.id, s]));
+  const segByIndex = new Map(allSegments.map((s) => [s.seg_index, s]));
+  const segById = new Map(allSegments.map((s) => [s.id, s]));
 
   const results = await Promise.all(
-    body.segments.map((req) => processOne(req, video as VideoRow, segById, segByIndex, knowledge, sb))
+    body.segments.map((req) => processOne(req, video, segById, segByIndex, knowledge, sb))
   );
 
   return NextResponse.json({ results });
@@ -159,7 +162,10 @@ async function processOne(
     notes = [e instanceof Error ? e.message : "recheck call failed"];
   }
 
-  await sb
+  // Cast to `any` for this one call: the untyped client (see supabase-server.ts) resolves
+  // .update()'s payload type to `never` without a generated Database type; we already
+  // constructed `finalLabel`/`verdict`/`notes` with our own hand-checked types above.
+  await (sb as any)
     .from("segments")
     .update({
       label: finalLabel,

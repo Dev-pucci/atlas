@@ -9,6 +9,12 @@ export interface VideoRow {
   objects: { name: string; descriptors?: string; role?: string }[];
   video_notes: string | null;
   cost_summary: string | null;
+  cost_usd: number | null;
+  cost_detail: { total_usd?: number; calls?: number; input_tokens?: number; output_tokens?: number;
+                 by_pass?: Record<string, { calls: number; in: number; out: number; usd: number }> } | null;
+  label_accuracy: { exact: number; n: number; mean_f1: number } | null;
+  segmentation_accuracy: { n_gold: number; n_proposed: number; count_delta: number; mean_err: number;
+                            median_err: number; max_err: number; recall_at_tol: number; precision_at_tol: number } | null;
   pushed_at: string;
   created_at: string;
 }

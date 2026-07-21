@@ -11,6 +11,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+from .client import CostTracker
 from .frames import extract_frames, video_info
 from .lint import ARTICLES, PRONOUNS, FORBIDDEN_WORDS, ING_VERBS, ING_NOUN_WHITELIST
 from .segments import Segment
@@ -22,9 +23,10 @@ def write_report(
     segments: list[Segment],
     context: dict,
     video_notes: str,
-    cost_summary: str,
+    cost: CostTracker,
     video_path: Path | None = None,
     cfg: dict | None = None,
+    segmentation_mode: str = "given",
 ) -> None:
     console = Console()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -47,7 +49,7 @@ def write_report(
     console.print(table)
     if video_notes:
         console.print(f"[yellow]Auditor notes:[/yellow] {video_notes}")
-    console.print(cost_summary)
+    console.print(cost.summary())
 
     # copy-paste file: one label per line, in order
     ann = out_dir / "annotations.txt"
@@ -80,6 +82,15 @@ def write_report(
         "generated": datetime.now().isoformat(timespec="seconds"),
         "context": context,
         "video_notes": video_notes,
+        "segmentation_mode": segmentation_mode,
+        "cost": {
+            "total_usd": cost.cost_usd,
+            "calls": cost.calls,
+            "input_tokens": cost.input_tokens,
+            "output_tokens": cost.output_tokens,
+            "by_pass": cost.by_pass,
+            "summary_text": cost.summary(),
+        },
         "segments": [
             {
                 "index": s.index,

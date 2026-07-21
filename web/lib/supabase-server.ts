@@ -13,6 +13,11 @@ function getEnv(name: string): string {
   return value;
 }
 
+// Note: intentionally untyped (no Database generic). This supabase-js version's schema-name
+// resolution generics are elaborate enough that a hand-written Database type risks subtle
+// mismatches without live schema introspection (`supabase gen types`, which needs a deployed
+// project). We already have hand-written Row types in ./types.ts — callers cast query results
+// to those immediately after destructuring instead of relying on builder-inferred types.
 let cached: ReturnType<typeof createClient> | null = null;
 
 export function supabaseServer() {

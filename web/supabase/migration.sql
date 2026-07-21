@@ -15,6 +15,10 @@ create table if not exists videos (
   objects jsonb default '[]',
   video_notes text,
   cost_summary text,
+  cost_usd double precision,
+  cost_detail jsonb default '{}',
+  label_accuracy jsonb,
+  segmentation_accuracy jsonb,
   pushed_at timestamptz default now(),
   created_at timestamptz default now()
 );

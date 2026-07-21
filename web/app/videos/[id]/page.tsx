@@ -6,29 +6,32 @@ import ReviewCards from "./ReviewCards";
 
 export const dynamic = "force-dynamic"; // signed frame URLs expire — never serve a cached page
 
-export default async function VideoReviewPage({ params }: { params: { id: string } }) {
+export default async function VideoReviewPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const sb = supabaseServer();
 
-  const { data: video, error: videoErr } = await sb
+  const { data: videoData, error: videoErr } = await sb
     .from("videos")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
   if (videoErr) throw videoErr;
-  if (!video) notFound();
+  if (!videoData) notFound();
+  const video = videoData as VideoRow;
 
-  const { data: segments, error: segErr } = await sb
+  const { data: segmentsData, error: segErr } = await sb
     .from("segments")
     .select("*")
-    .eq("video_id", params.id)
+    .eq("video_id", id)
     .order("seg_index", { ascending: true });
   if (segErr) throw segErr;
+  const segments = (segmentsData ?? []) as SegmentRow[];
 
-  const allPaths = (segments as SegmentRow[]).flatMap((s) => s.frame_paths);
+  const allPaths = segments.flatMap((s) => s.frame_paths);
   const signedUrls = await signFramePaths(allPaths);
   const urlByPath = new Map(allPaths.map((p, i) => [p, signedUrls[i]]));
 
-  const segmentsWithFrames: SegmentWithFrames[] = (segments as SegmentRow[]).map((s) => ({
+  const segmentsWithFrames: SegmentWithFrames[] = segments.map((s) => ({
     ...s,
     frameUrls: s.frame_paths.map((p) => urlByPath.get(p) ?? ""),
   }));
@@ -40,7 +43,7 @@ export default async function VideoReviewPage({ params }: { params: { id: string
           &larr; all videos
         </Link>
       </div>
-      <ReviewCards video={video as VideoRow} initialSegments={segmentsWithFrames} />
+      <ReviewCards video={video} initialSegments={segmentsWithFrames} />
     </main>
   );
 }

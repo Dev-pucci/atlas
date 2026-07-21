@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .pipeline.boundaries import propose_segments
 from .pipeline.client import Router, load_config
 from .pipeline.frames import find_video, video_info
 from .pipeline import ingest as ingest_mod
@@ -46,21 +47,27 @@ def cmd_annotate(args) -> None:
     out_dir.mkdir(exist_ok=True)
     print(f"Video: {video_path.name} — {info.duration:.1f}s @ {info.fps:.1f}fps {info.width}x{info.height}")
 
+    # Pass 0 — context & glossary (reused by auto-segment below, and by labeling either way;
+    # a pure reorder — build_context never took segments as an argument)
+    context = build_context(video_path, router, cfg, out_dir, ingest_mod.load_vocabulary())
+    print(f"Task: {context.get('task_summary', '')[:120]}...")
+
     if args.segments:
         segments = parse_segments_file(args.segments)
     elif args.segments_image:
         segments = parse_segments_image(args.segments_image, router)
     elif args.segments_text:
         segments = parse_segments_text(args.segments_text)
+    elif args.auto_segment:
+        segments = propose_segments(video_path, context, rulebook, router, cfg)
     else:
-        raise SystemExit("Provide segments via --segments <file>, --segments-image <png>, or --segments-text '...'")
+        raise SystemExit(
+            "Provide segments via --segments <file>, --segments-image <png>, --segments-text '...', "
+            "or --auto-segment"
+        )
     print(f"Segments: {len(segments)} ({segments[0].time_str()} ... {segments[-1].time_str()})")
     for w in validate_segments(segments, info.duration):
         print(f"  ! {w}")
-
-    # Pass 0 — context & glossary
-    context = build_context(video_path, router, cfg, out_dir, ingest_mod.load_vocabulary())
-    print(f"Task: {context.get('task_summary', '')[:120]}...")
 
     # Pass 1 — batched per-segment labeling
     print("Pass 1: labeling segments (batched)")
@@ -96,8 +103,9 @@ def cmd_annotate(args) -> None:
                 fixed, _ = repair_label(seg.label, [v], router, seg.duration)
                 seg.label = fixed
 
-    write_report(out_dir, video_path.name, segments, context, video_notes, router.cost.summary(),
-                 video_path=video_path, cfg=cfg)
+    write_report(out_dir, video_path.name, segments, context, video_notes, router.cost,
+                 video_path=video_path, cfg=cfg,
+                 segmentation_mode="auto" if args.auto_segment else "given")
 
 
 def cmd_lint(args) -> None:
@@ -164,9 +172,12 @@ def cmd_learn(args) -> None:
 
 
 def cmd_eval(args) -> None:
-    from .eval import run_eval
+    from .eval import run_eval, score_segmentation
 
-    run_eval(live=args.live)
+    if args.check_segmentation:
+        score_segmentation(tolerance=args.tolerance)
+    else:
+        run_eval(live=args.live)
 
 
 def cmd_push(args) -> None:
@@ -187,9 +198,12 @@ def main() -> None:
 
     p_ann = sub.add_parser("annotate", help="annotate a video")
     p_ann.add_argument("video", help="video file or folder containing one")
-    p_ann.add_argument("--segments", help="text/csv file with 'M:SS.s - M:SS.s' lines")
-    p_ann.add_argument("--segments-image", help="screenshot of the platform's segment list")
-    p_ann.add_argument("--segments-text", help="segment lines passed inline")
+    seg_group = p_ann.add_mutually_exclusive_group(required=True)
+    seg_group.add_argument("--segments", help="text/csv file with 'M:SS.s - M:SS.s' lines")
+    seg_group.add_argument("--segments-image", help="screenshot of the platform's segment list")
+    seg_group.add_argument("--segments-text", help="segment lines passed inline")
+    seg_group.add_argument("--auto-segment", action="store_true",
+                           help="propose segment boundaries from the raw video (no platform timestamps given)")
     p_ann.set_defaults(func=cmd_annotate)
 
     p_lint = sub.add_parser("lint", help="lint a single label offline")
@@ -207,6 +221,10 @@ def main() -> None:
     p_eval = sub.add_parser("eval", help="score generated labels against gold data")
     p_eval.add_argument("--live", action="store_true",
                         help="run the full pipeline on the sample videos first (costs API credits)")
+    p_eval.add_argument("--check-segmentation", action="store_true",
+                        help="cheap: score the auto-segmenter's boundaries vs gold, skip labeling entirely")
+    p_eval.add_argument("--tolerance", type=float, default=2.0,
+                        help="seconds of slack for boundary recall/precision (default 2.0)")
     p_eval.set_defaults(func=cmd_eval)
 
     p_push = sub.add_parser("push", help="push a completed run to Supabase for hosted review")

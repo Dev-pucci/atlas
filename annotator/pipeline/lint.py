@@ -160,8 +160,10 @@ def lint_label(label: str, duration: float | None = None) -> list[Violation]:
     for w in words:
         if w in {"tool", "object", "tools", "objects"}:
             v.append(Violation("generic-noun", "warn", f"generic '{w}' — name the actual object (ok only for technical items)"))
-    # hand specification
-    if "hand" not in words and "hands" not in words:
+    # hand specification ("no action" is a special label that legitimately has no hand)
+    if low == "no action":
+        pass
+    elif "hand" not in words and "hands" not in words:
         v.append(Violation("hand-spec", "error", "label never specifies left/right/both hand(s)"))
     else:
         clauses = re.split(r",| and (?=[a-z]+ )", low)

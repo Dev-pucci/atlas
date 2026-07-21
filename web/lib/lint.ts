@@ -170,7 +170,9 @@ export function lintLabel(label: string, duration?: number): Violation[] {
     }
   }
 
-  if (!w.includes("hand") && !w.includes("hands")) {
+  if (low === "no action") {
+    // special label that legitimately has no hand — skip
+  } else if (!w.includes("hand") && !w.includes("hands")) {
     out.push(v("hand-spec", "error", "label never specifies left/right/both hand(s)"));
   } else {
     const cls = low.split(/,| and (?=[a-z]+ )/);
