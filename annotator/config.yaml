@@ -30,7 +30,12 @@ sampling:
   label_max_frames: 12        # hard cap per segment
   batch_size: 6               # segments labeled per API call (big overhead saving)
   pad_seconds: 0.5            # padding for single-segment (escalation) calls
-  audit_frames_per_segment: 0 # 0 = text-only audit (near-free); >0 adds frames back
+  audit_frames_per_segment: 2 # text-only audit cannot catch visual misidentification (e.g. a
+                              # confidently-labeled "brush" that was actually tweezers) since it
+                              # has no frames to check against — only grammar/consistency/logical-
+                              # plausibility issues. 2 = start + midpoint frame per segment, cheap
+                              # relative to the labeling pass (was 0 = text-only; tested via
+                              # eval --live against gold data before keeping this)
   escalate_confidence: 0.55   # segments below this confidence get re-labeled by 'escalate' model
                               # (audit-suspect segments always escalate; tested 0.7 = 11/18 segments
                               # escalated = second full pass, too expensive)

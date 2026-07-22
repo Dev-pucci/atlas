@@ -45,13 +45,18 @@ Verdicts:
   verb/object) {suspect_scope}. Describe it in issues; do NOT provide a corrected label for visual
   doubts you cannot verify.
 
+Each "issues" entry MUST be under 15 words — a label/pointer for a human to look at, not an essay.
+"category: what's wrong" is enough (e.g. "wrong object: looks like tweezers, not a brush"). You are
+reviewing MANY segments in this one reply — verbose issues will not fit in the response; terse ones
+will.
+
 Reply with JSON only:
 {{
   "segments": [
     {{
       "index": 1,
       "verdict": "ok" | "revise" | "suspect",
-      "issues": ["category: short explanation", ...],
+      "issues": ["category: short explanation, under 15 words", ...],
       "corrected_label": "only when verdict is revise",
       "confidence": 0.0-1.0
     }}

@@ -113,6 +113,10 @@ Environment: {environment}
 Object glossary (use EXACTLY these names): {glossary}
 Hands overview: {hands_overview}
 
+## Why this segment is being re-examined
+{focus_hint}
+Pay specific attention to this — it's the reason a stronger model was asked to look again.
+
 ## Previous segment's final label (for continuity — objects held usually stay held)
 {prev_label}
 
@@ -267,6 +271,7 @@ def label_one_segment(
     fps: float | None = None,
     max_frames: int | None = None,
     model: str | None = None,
+    focus_hint: str = "",
 ) -> Segment:
     """Single-segment labeling with boundary padding — used for escalation."""
     s = cfg["sampling"]
@@ -283,6 +288,7 @@ def label_one_segment(
         environment=context.get("environment", ""),
         glossary=_glossary_line(context),
         hands_overview=context.get("hands_overview", ""),
+        focus_hint=focus_hint or "(no specific reason given — re-verify hands, objects, and actions generally)",
         prev_label=prev_label,
         draft=seg.label or "(none)",
         start=fmt_ts(seg.start),
@@ -324,23 +330,30 @@ def escalate_segments(
     if not model:
         return segments
 
-    def needs_escalation(seg: Segment) -> bool:
-        if any(f.startswith("audit suspect") for f in seg.flags):
-            return True
-        return threshold > 0 and seg.confidence < threshold
+    def escalation_reason(seg: Segment) -> str:
+        """Empty string means "don't escalate"; non-empty is also the focus_hint passed to the
+        stronger model, so it knows exactly what to re-examine instead of blindly re-labeling."""
+        suspect_reasons = [f.removeprefix("audit suspect: ") for f in seg.flags if f.startswith("audit suspect")]
+        if suspect_reasons:
+            return "The audit flagged this segment as visually suspect: " + " | ".join(suspect_reasons)
+        if threshold > 0 and seg.confidence < threshold:
+            return f"The first labeling pass reported low confidence ({seg.confidence:.2f}) on this segment."
+        return ""
 
-    targets = [seg for seg in segments if needs_escalation(seg)]
+    targets = [(seg, escalation_reason(seg)) for seg in segments]
+    targets = [(seg, reason) for seg, reason in targets if reason]
     if not targets:
         print("Escalation: no suspect or low-confidence segments — skipping")
         return segments
     print(f"Escalation: {len(targets)} segment(s) (audit-suspect or conf<{threshold}) -> {model}")
-    for seg in targets:
+    for seg, reason in targets:
         idx = segments.index(seg)
         prev_label = segments[idx - 1].label if idx > 0 else "(this is the first segment of the video)"
         old = seg.label
         label_one_segment(
             video_path, seg, prev_label, context, rulebook, fewshot, router, cfg,
             fps=s.get("escalate_fps"), max_frames=s.get("escalate_max_frames"), model=model,
+            focus_hint=reason,
         )
         seg.flags.append(f"escalated to {model}" + (f" (was: {old})" if old and old != seg.label else ""))
         print(f"  seg {seg.index:>2} re-labeled conf={seg.confidence:.2f}  {seg.label}")
