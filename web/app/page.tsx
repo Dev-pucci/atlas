@@ -118,14 +118,6 @@ export default async function VideoListPage() {
 
   const totalCost = videos.reduce((sum, v) => sum + (v.cost_usd ?? 0), 0);
   const withCost = videos.filter((v) => v.cost_usd != null);
-  const withLabelAcc = videos.filter((v) => v.label_accuracy != null);
-  const withSegAcc = videos.filter((v) => v.segmentation_accuracy != null);
-  const avgF1 = withLabelAcc.length
-    ? withLabelAcc.reduce((s, v) => s + v.label_accuracy!.mean_f1, 0) / withLabelAcc.length
-    : null;
-  const avgRecall = withSegAcc.length
-    ? withSegAcc.reduce((s, v) => s + v.segmentation_accuracy!.recall_at_tol, 0) / withSegAcc.length
-    : null;
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
@@ -171,8 +163,6 @@ export default async function VideoListPage() {
           <StatTile label="Videos" value={String(videos.length)} />
           <StatTile label="Total cost" value={fmtUsd(totalCost)} />
           <StatTile label="Avg cost / video" value={withCost.length ? fmtUsd(totalCost / withCost.length) : "—"} />
-          <StatTile label="Avg label accuracy" value={avgF1 != null ? `${fmtPct(avgF1)} F1` : "no gold data"} />
-          <StatTile label="Avg segment recall" value={avgRecall != null ? fmtPct(avgRecall) : "no gold data"} />
         </div>
       )}
 
