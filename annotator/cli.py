@@ -7,6 +7,7 @@ Commands:
   python -m annotator eval                             score pipeline vs gold data
   python -m annotator push <video-or-folder>            upload a completed run for hosted review
   python -m annotator watch                             process videos uploaded through the web UI
+  python -m annotator harvest                            pull finalized web edits into fewshot.md
 """
 
 from __future__ import annotations
@@ -115,10 +116,20 @@ def cmd_learn(args) -> None:
 
     if hints:
         vocab_path = ingest_mod.KNOWLEDGE_DIR / "vocabulary.md"
-        with open(vocab_path, "a", encoding="utf-8") as f:
-            f.write(f"\n## Learned {date.today().isoformat()}\n")
-            f.writelines(f"- {h}\n" for h in hints)
-        print(f"Added {len(hints)} vocabulary hint(s) to {vocab_path}: {', '.join(hints)}")
+        # De-dup against the existing file (case-insensitive substring check) — repeated
+        # `learn` calls previously produced redundant single-word entries ("hold", "pick up"
+        # appearing 3+ times); this was cleaned up by hand once this session and shouldn't
+        # need to be again.
+        existing = vocab_path.read_text(encoding="utf-8").lower() if vocab_path.exists() else ""
+        new_hints = [h for h in hints if h.strip().lower() not in existing]
+        if new_hints:
+            with open(vocab_path, "a", encoding="utf-8") as f:
+                f.write(f"\n## Learned {date.today().isoformat()}\n")
+                f.writelines(f"- {h}\n" for h in new_hints)
+            print(f"Added {len(new_hints)} new vocabulary hint(s) to {vocab_path}: {', '.join(new_hints)}")
+        skipped = len(hints) - len(new_hints)
+        if skipped:
+            print(f"Skipped {skipped} hint(s) already present in vocabulary.md")
     print("Future annotations will use these examples automatically.")
 
 
@@ -141,6 +152,12 @@ def cmd_watch(args) -> None:
     from .pipeline.watch import watch
 
     watch(poll_seconds=args.poll_seconds)
+
+
+def cmd_harvest(args) -> None:
+    from .pipeline.harvest import harvest_finalized_edits
+
+    harvest_finalized_edits(write=args.write)
 
 
 def main() -> None:
@@ -193,6 +210,14 @@ def main() -> None:
     p_watch.add_argument("--poll-seconds", type=float, default=10.0,
                          help="seconds between queue checks when idle (default 10)")
     p_watch.set_defaults(func=cmd_watch)
+
+    p_harvest = sub.add_parser(
+        "harvest", help="pull finalized web-review edits into fewshot.md (second source of "
+                        "ground truth, alongside learn's audit screenshots)"
+    )
+    p_harvest.add_argument("--write", action="store_true",
+                           help="actually append to fewshot.md (default: dry-run preview only)")
+    p_harvest.set_defaults(func=cmd_harvest)
 
     args = p.parse_args()
     args.func(args)

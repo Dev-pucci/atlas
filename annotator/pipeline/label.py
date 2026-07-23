@@ -220,7 +220,8 @@ def label_segments(
             for seg in chunk
         }
         all_times = [t for times in per_seg_times.values() for t in times]
-        frames = dict(extract_frames(video_path, all_times, s["max_width"], s["jpeg_quality"]))
+        label_width = s.get("label_max_width", s["max_width"])
+        frames = dict(extract_frames(video_path, all_times, label_width, s["jpeg_quality"]))
 
         content = [
             text_part(
@@ -281,7 +282,8 @@ def label_one_segment(
     pad_start = max(seg.start - s["pad_seconds"], 0.0)
     pad_end = min(seg.end + s["pad_seconds"], info.duration - 0.05)
     times = sample_times(pad_start, pad_end, fps, max_frames)
-    frames = extract_frames(video_path, times, s["max_width"], s["jpeg_quality"])
+    label_width = s.get("label_max_width", s["max_width"])
+    frames = extract_frames(video_path, times, label_width, s["jpeg_quality"])
 
     prompt = SINGLE_PROMPT.format(
         task_summary=context.get("task_summary", ""),

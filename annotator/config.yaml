@@ -41,8 +41,13 @@ sampling:
                               # escalated = second full pass, too expensive)
   escalate_fps: 3.0           # denser frames for escalated segments
   escalate_max_frames: 16
-  max_width: 640              # frames resized to at most this width
+  max_width: 640              # frames resized to at most this width (context/audit/auto-segment)
   jpeg_quality: 78
+  label_max_width: 640        # separate override for Pass 1 + escalation (label_one_segment) —
+                              # tried 800 (small tools like tweezers can be hard to tell from a
+                              # brush at 640px): regressed video_1-3 mean F1 0.765->0.747 with no
+                              # offsetting exact-match gain via eval --live. Reverted; no evidence
+                              # this specific dimension was the accuracy bottleneck.
 
   # Pass 0.5 (auto-segment): only used with `annotate --auto-segment` (no platform timestamps given).
   # Sized against 102 real gold segments: mean 4.95s, median 4.7s, max 9.7s.
