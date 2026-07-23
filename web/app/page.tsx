@@ -116,8 +116,9 @@ async function loadQueuedJobs(): Promise<JobRow[]> {
 export default async function VideoListPage() {
   const [videos, jobs] = await Promise.all([loadVideos(), loadQueuedJobs()]);
 
-  const totalCost = videos.reduce((sum, v) => sum + (v.cost_usd ?? 0), 0);
-  const withCost = videos.filter((v) => v.cost_usd != null);
+  // Cost display disabled for now (kept, not deleted, in case it needs to come back):
+  // const totalCost = videos.reduce((sum, v) => sum + (v.cost_usd ?? 0), 0);
+  // const withCost = videos.filter((v) => v.cost_usd != null);
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
@@ -161,8 +162,10 @@ export default async function VideoListPage() {
       {videos.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
           <StatTile label="Videos" value={String(videos.length)} />
+          {/* Cost display disabled for now (kept, not deleted, in case it needs to come back):
           <StatTile label="Total cost" value={fmtUsd(totalCost)} />
           <StatTile label="Avg cost / video" value={withCost.length ? fmtUsd(totalCost / withCost.length) : "—"} />
+          */}
         </div>
       )}
 
@@ -186,7 +189,9 @@ export default async function VideoListPage() {
             <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
               {v.segmentCount} segments · {v.needsReviewCount} to review · {v.finalizedCount} finalized
               {v.duration_seconds ? ` · ${v.duration_seconds.toFixed(0)}s` : ""}
+              {/* Cost display disabled for now (kept, not deleted, in case it needs to come back):
               {v.cost_usd != null ? ` · ${fmtUsd(v.cost_usd)}` : ""}
+              */}
             </div>
             {(v.label_accuracy || v.segmentation_accuracy) ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
